@@ -4,9 +4,9 @@
 
 **Goal:** Build a private, mobile-first PWA for two people to track separate daily habit checklists, sync through Supabase, and calculate 20,000 VND penalties for missed days.
 
-**Architecture:** Use a Vite React TypeScript app with small screen components, isolated domain logic, and a Supabase service layer. Store the local device identity in `localStorage`, keep Supabase database access out of UI components, and make penalty/checklist operations idempotent. The first implementation should run locally with seeded demo data and real Supabase wiring through environment variables.
+**Architecture:** Use a Next.js App Router TypeScript app with a client-side PWA shell for the private habit workflow, SEO-ready metadata, isolated domain logic, and a Supabase service layer. Store the local device identity in `localStorage`, keep Supabase database access out of UI components, and make penalty/checklist operations idempotent. The first implementation should run locally with seeded demo data and real Supabase wiring through environment variables.
 
-**Tech Stack:** Vite, React, TypeScript, Vitest, Testing Library, Supabase JS, vite-plugin-pwa, CSS modules or plain CSS, Google Sans Flex font family with system fallbacks.
+**Tech Stack:** Next.js App Router, React, TypeScript, Vitest, Testing Library, Supabase JS, manual web app manifest and service worker, global CSS, Google Sans Flex font family with system fallbacks.
 
 ## Global Constraints
 
@@ -27,12 +27,15 @@
 ## File Structure
 
 - `package.json`: scripts and dependencies.
-- `index.html`: app root and Vietnamese metadata.
-- `vite.config.ts`: React, Vitest, and PWA configuration.
-- `tsconfig.json`, `tsconfig.node.json`: TypeScript configuration.
-- `src/main.tsx`: React entry point.
-- `src/App.tsx`: route/tab shell and identity gate.
-- `src/styles.css`: global mobile-first visual system.
+- `next.config.mjs`: Next.js configuration.
+- `vitest.config.ts`: Vitest configuration for React Testing Library.
+- `tsconfig.json`: TypeScript configuration.
+- `src/app/layout.tsx`: root HTML shell, SEO metadata, viewport, and global CSS import.
+- `src/app/manifest.ts`: PWA web app manifest.
+- `src/app/page.tsx`: server entry that renders the client app shell.
+- `src/app/AppShell.tsx`: client-side tab shell and identity gate.
+- `src/app/globals.css`: global mobile-first visual system.
+- `public/sw.js`: lightweight service worker for app shell caching.
 - `src/types/domain.ts`: shared domain types.
 - `src/lib/date.ts`: timezone-safe date helpers.
 - `src/lib/identity.ts`: local identity persistence.
@@ -45,6 +48,7 @@
 - `src/screens/HistoryScreen.tsx`: 7-day accountability history.
 - `src/screens/HabitsScreen.tsx`: current user's habit management.
 - `src/screens/MoneyScreen.tsx`: debt, penalties, and payment recording.
+- `src/test/setup.ts`: Testing Library matcher setup.
 - `src/test/testData.ts`: fixtures used by unit and UI tests.
 - `src/**/*.test.ts`, `src/**/*.test.tsx`: tests beside implementation files.
 - `supabase/schema.sql`: database schema, uniqueness constraints, and seed rows.
@@ -52,22 +56,26 @@
 
 ---
 
-### Task 1: Scaffold React PWA Foundation
+### Task 1: Scaffold Next.js PWA Foundation
 
 **Files:**
 - Create: `package.json`
-- Create: `index.html`
-- Create: `vite.config.ts`
+- Create: `next.config.mjs`
+- Create: `vitest.config.ts`
 - Create: `tsconfig.json`
-- Create: `tsconfig.node.json`
-- Create: `src/main.tsx`
-- Create: `src/App.tsx`
-- Create: `src/styles.css`
+- Create: `src/app/layout.tsx`
+- Create: `src/app/manifest.ts`
+- Create: `src/app/page.tsx`
+- Create: `src/app/AppShell.tsx`
+- Create: `src/app/globals.css`
+- Create: `public/sw.js`
+- Create: `src/test/setup.ts`
 - Create: `.env.example`
 
 **Interfaces:**
-- Produces: `App` React component with tab state and starter screens.
-- Produces: npm scripts `dev`, `build`, `test`, and `preview`.
+- Produces: `AppShell` client component with tab state and starter screens.
+- Produces: npm scripts `dev`, `build`, `test`, and `start`.
+- Produces: SEO-ready root metadata, PWA manifest, and service worker registration.
 
 - [ ] **Step 1: Create project configuration**
 
@@ -80,25 +88,24 @@ Create `package.json` with these scripts and dependencies:
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "dev": "next dev -H 0.0.0.0",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "preview": "vite preview --host 0.0.0.0"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "vite-plugin-pwa": "^0.20.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "next": "^16.2.12",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.5.0",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "jsdom": "^24.1.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
@@ -106,36 +113,30 @@ Create `package.json` with these scripts and dependencies:
 }
 ```
 
-- [ ] **Step 2: Create Vite config**
+- [ ] **Step 2: Create Next.js and Vitest config**
 
-Create `vite.config.ts`:
+Create `next.config.mjs`:
+
+```ts
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  poweredByHeader: false
+};
+
+export default nextConfig;
+```
+
+Create `vitest.config.ts`:
 
 ```ts
 import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
-import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: "autoUpdate",
-      manifest: {
-        name: "Couple Habit",
-        short_name: "Habits",
-        description: "Theo doi thoi quen hang ngay cho hai nguoi.",
-        theme_color: "#201f3b",
-        background_color: "#fbf9ff",
-        display: "standalone",
-        start_url: "/",
-        icons: []
-      }
-    })
-  ],
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: []
+    setupFiles: ["./src/test/setup.ts"]
   }
 });
 ```
@@ -157,70 +158,92 @@ Create `tsconfig.json`:
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }]
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
 }
 ```
 
-Create `tsconfig.node.json`:
+- [ ] **Step 4: Create app router files**
 
-```json
-{
-  "compilerOptions": {
-    "composite": true,
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "allowSyntheticDefaultImports": true
+Create `src/app/layout.tsx`:
+
+```tsx
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: {
+    default: "Couple Habit",
+    template: "%s | Couple Habit"
   },
-  "include": ["vite.config.ts"]
+  description: "Theo dõi thói quen hằng ngày cho hai người.",
+  applicationName: "Couple Habit",
+  appleWebApp: {
+    capable: true,
+    title: "Couple Habit",
+    statusBarStyle: "black-translucent"
+  },
+  manifest: "/manifest.webmanifest"
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#201f3b"
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="vi">
+      <body>{children}</body>
+    </html>
+  );
 }
 ```
 
-- [ ] **Step 4: Create app entry files**
+Create `src/app/manifest.ts`:
 
-Create `index.html`:
+```ts
+import type { MetadataRoute } from "next";
 
-```html
-<!doctype html>
-<html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#201f3b" />
-    <title>Couple Habit</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: "Couple Habit",
+    short_name: "Habits",
+    description: "Theo dõi thói quen hằng ngày cho hai người.",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#fbf9ff",
+    theme_color: "#201f3b",
+    icons: []
+  };
+}
 ```
 
-Create `src/main.tsx`:
+Create `src/app/page.tsx`:
 
 ```tsx
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
-import "./styles.css";
+import AppShell from "./AppShell";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+export default function Page() {
+  return <AppShell />;
+}
 ```
 
-Create `src/App.tsx`:
+Create `src/app/AppShell.tsx`:
 
 ```tsx
-import { useState } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 
 type Tab = "today" | "history" | "habits" | "money";
 
@@ -231,8 +254,16 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: "money", label: "Tien phat" }
 ];
 
-export default function App() {
+export default function AppShell() {
   const [activeTab, setActiveTab] = useState<Tab>("today");
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        // The app remains usable if service worker registration fails.
+      });
+    }
+  }, []);
 
   return (
     <main className="app-shell">
@@ -259,7 +290,7 @@ export default function App() {
 
 - [ ] **Step 5: Add starter global CSS**
 
-Create `src/styles.css`:
+Create `src/app/globals.css`:
 
 ```css
 :root {
@@ -328,13 +359,48 @@ input {
 }
 ```
 
-- [ ] **Step 6: Add environment example**
+- [ ] **Step 6: Add service worker, test setup, and environment example**
+
+Create `public/sw.js`:
+
+```js
+const CACHE_NAME = "couple-habit-shell-v1";
+const APP_SHELL = ["/"];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") {
+    return;
+  }
+
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+});
+```
+
+Create `src/test/setup.ts`:
+
+```ts
+import "@testing-library/jest-dom/vitest";
+```
 
 Create `.env.example`:
 
 ```bash
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 - [ ] **Step 7: Install dependencies**
@@ -361,8 +427,8 @@ Expected: build succeeds; tests report no test files or pass if Vitest exits suc
 - [ ] **Step 9: Commit**
 
 ```bash
-git add package.json package-lock.json index.html vite.config.ts tsconfig.json tsconfig.node.json src/main.tsx src/App.tsx src/styles.css .env.example
-git commit -m "feat: scaffold React PWA"
+git add package.json package-lock.json next.config.mjs vitest.config.ts tsconfig.json src/app/layout.tsx src/app/manifest.ts src/app/page.tsx src/app/AppShell.tsx src/app/globals.css public/sw.js src/test/setup.ts .env.example
+git commit -m "feat: scaffold Next.js PWA"
 ```
 
 ---
@@ -729,8 +795,8 @@ Create `src/lib/supabaseClient.ts`:
 ```ts
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase environment variables.");
@@ -828,7 +894,7 @@ git commit -m "feat: add Supabase service boundary"
 - Create: `src/lib/identity.test.ts`
 - Create: `src/components/IdentitySetup.tsx`
 - Create: `src/components/IdentitySetup.test.tsx`
-- Modify: `src/App.tsx`
+- Modify: `src/app/AppShell.tsx`
 
 **Interfaces:**
 - Produces: `getStoredIdentity(): PersonSlug | null`.
@@ -953,7 +1019,7 @@ export default function IdentitySetup({ onSelect }: Props) {
 
 - [ ] **Step 6: Gate App behind identity selection**
 
-Modify `src/App.tsx` to load identity on mount, render `IdentitySetup` when identity is missing, and call `setStoredIdentity` when selected. Keep the existing starter tab screens until later tasks replace them.
+Modify `src/app/AppShell.tsx` to load identity on mount, render `IdentitySetup` when identity is missing, and call `setStoredIdentity` when selected. Keep the existing starter tab screens until later tasks replace them.
 
 - [ ] **Step 7: Run tests and build**
 
@@ -969,7 +1035,7 @@ Expected: PASS and build succeeds.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/lib/identity.ts src/lib/identity.test.ts src/components/IdentitySetup.tsx src/components/IdentitySetup.test.tsx src/App.tsx
+git add src/lib/identity.ts src/lib/identity.test.ts src/components/IdentitySetup.tsx src/components/IdentitySetup.test.tsx src/app/AppShell.tsx
 git commit -m "feat: add local identity setup"
 ```
 
@@ -981,8 +1047,8 @@ git commit -m "feat: add local identity setup"
 - Create: `src/screens/TodayScreen.tsx`
 - Create: `src/screens/TodayScreen.test.tsx`
 - Create: `src/components/BottomNav.tsx`
-- Modify: `src/App.tsx`
-- Modify: `src/styles.css`
+- Modify: `src/app/AppShell.tsx`
+- Modify: `src/app/globals.css`
 
 **Interfaces:**
 - Consumes: `PersonSlug`, `DailyEntry`, `calculateCompletion`.
@@ -1102,11 +1168,11 @@ Create `src/screens/TodayScreen.tsx` using `calculateCompletion`. The component 
 
 - [ ] **Step 5: Wire TodayScreen into App**
 
-Modify `src/App.tsx` so the `today` tab renders `TodayScreen` with temporary fixture entries until Task 7 connects Supabase data.
+Modify `src/app/AppShell.tsx` so the `today` tab renders `TodayScreen` with temporary fixture entries until Task 7 connects Supabase data.
 
 - [ ] **Step 6: Add visual CSS**
 
-Modify `src/styles.css` to add the approved visual system: dark header, progress card, two-column person grid, lavender/rose accents, large checkboxes, and fixed bottom nav spacing.
+Modify `src/app/globals.css` to add the approved visual system: dark header, progress card, two-column person grid, lavender/rose accents, large checkboxes, and fixed bottom nav spacing.
 
 - [ ] **Step 7: Run tests and build**
 
@@ -1122,7 +1188,7 @@ Expected: PASS and build succeeds.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/screens/TodayScreen.tsx src/screens/TodayScreen.test.tsx src/components/BottomNav.tsx src/App.tsx src/styles.css
+git add src/screens/TodayScreen.tsx src/screens/TodayScreen.test.tsx src/components/BottomNav.tsx src/app/AppShell.tsx src/app/globals.css
 git commit -m "feat: build today mirror screen"
 ```
 
@@ -1134,8 +1200,8 @@ git commit -m "feat: build today mirror screen"
 - Create: `src/screens/HabitsScreen.tsx`
 - Create: `src/screens/HabitsScreen.test.tsx`
 - Modify: `src/services/habitService.ts`
-- Modify: `src/App.tsx`
-- Modify: `src/styles.css`
+- Modify: `src/app/AppShell.tsx`
+- Modify: `src/app/globals.css`
 
 **Interfaces:**
 - Produces: `HabitsScreen({ currentIdentity, habits, onAddHabit, onRenameHabit, onDeactivateHabit, onMoveHabit })`.
@@ -1203,7 +1269,7 @@ Each method should use the `habits` table and throw Supabase errors.
 
 - [ ] **Step 5: Wire HabitsScreen into App with temporary local state**
 
-Modify `src/App.tsx` so the `habits` tab renders `HabitsScreen` for the selected identity using local state until Task 7 replaces local state with service calls.
+Modify `src/app/AppShell.tsx` so the `habits` tab renders `HabitsScreen` for the selected identity using local state until Task 7 replaces local state with service calls.
 
 - [ ] **Step 6: Run tests and build**
 
@@ -1219,7 +1285,7 @@ Expected: PASS and build succeeds.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/screens/HabitsScreen.tsx src/screens/HabitsScreen.test.tsx src/services/habitService.ts src/App.tsx src/styles.css
+git add src/screens/HabitsScreen.tsx src/screens/HabitsScreen.test.tsx src/services/habitService.ts src/app/AppShell.tsx src/app/globals.css
 git commit -m "feat: add habit management screen"
 ```
 
@@ -1230,7 +1296,7 @@ git commit -m "feat: add habit management screen"
 **Files:**
 - Modify: `src/services/habitService.ts`
 - Modify: `src/services/habitService.test.ts`
-- Modify: `src/App.tsx`
+- Modify: `src/app/AppShell.tsx`
 - Modify: `src/types/domain.ts`
 
 **Interfaces:**
@@ -1279,7 +1345,7 @@ Modify `src/services/habitService.ts` so:
 
 - [ ] **Step 4: Wire App to service**
 
-Modify `src/App.tsx` to:
+Modify `src/app/AppShell.tsx` to:
 
 - Create the service from `supabase`.
 - Load people, today's entries, habits, and money summaries after identity selection.
@@ -1302,7 +1368,7 @@ Expected: PASS and build succeeds.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/services/habitService.ts src/services/habitService.test.ts src/App.tsx src/types/domain.ts
+git add src/services/habitService.ts src/services/habitService.test.ts src/app/AppShell.tsx src/types/domain.ts
 git commit -m "feat: connect app to Supabase data"
 ```
 
@@ -1315,8 +1381,8 @@ git commit -m "feat: connect app to Supabase data"
 - Create: `src/screens/HistoryScreen.test.tsx`
 - Create: `src/screens/MoneyScreen.tsx`
 - Create: `src/screens/MoneyScreen.test.tsx`
-- Modify: `src/App.tsx`
-- Modify: `src/styles.css`
+- Modify: `src/app/AppShell.tsx`
+- Modify: `src/app/globals.css`
 
 **Interfaces:**
 - Produces: `HistoryScreen({ summaries })`.
@@ -1403,7 +1469,7 @@ Create debt cards for both people, recent penalty/payment lists, and `Đã đón
 
 - [ ] **Step 6: Wire screens into App**
 
-Modify `src/App.tsx` so the `history` and `money` tabs render real loaded data and `MoneyScreen` calls `recordPayment`.
+Modify `src/app/AppShell.tsx` so the `history` and `money` tabs render real loaded data and `MoneyScreen` calls `recordPayment`.
 
 - [ ] **Step 7: Run tests and build**
 
@@ -1419,7 +1485,7 @@ Expected: PASS and build succeeds.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/screens/HistoryScreen.tsx src/screens/HistoryScreen.test.tsx src/screens/MoneyScreen.tsx src/screens/MoneyScreen.test.tsx src/App.tsx src/styles.css
+git add src/screens/HistoryScreen.tsx src/screens/HistoryScreen.test.tsx src/screens/MoneyScreen.tsx src/screens/MoneyScreen.test.tsx src/app/AppShell.tsx src/app/globals.css
 git commit -m "feat: add history and money screens"
 ```
 
@@ -1430,7 +1496,7 @@ git commit -m "feat: add history and money screens"
 **Files:**
 - Modify: `src/services/habitService.ts`
 - Modify: `src/services/habitService.test.ts`
-- Modify: `src/App.tsx`
+- Modify: `src/app/AppShell.tsx`
 - Modify: `src/lib/date.ts`
 - Modify: `src/lib/habitLogic.test.ts`
 
@@ -1476,7 +1542,7 @@ Add `closePastDays(today)` to the service. It should:
 
 - [ ] **Step 4: Call closePastDays from App startup**
 
-Modify `src/App.tsx` so after identity selection and before loading summaries, it calls `service.closePastDays(todayInVietnam())`.
+Modify `src/app/AppShell.tsx` so after identity selection and before loading summaries, it calls `service.closePastDays(todayInVietnam())`.
 
 - [ ] **Step 5: Run tests and build**
 
@@ -1492,7 +1558,7 @@ Expected: PASS and build succeeds.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/services/habitService.ts src/services/habitService.test.ts src/App.tsx src/lib/date.ts src/lib/habitLogic.test.ts
+git add src/services/habitService.ts src/services/habitService.test.ts src/app/AppShell.tsx src/lib/date.ts src/lib/habitLogic.test.ts
 git commit -m "feat: close missed days with penalties"
 ```
 
@@ -1501,9 +1567,9 @@ git commit -m "feat: close missed days with penalties"
 ### Task 10: Final Mobile Polish and Verification
 
 **Files:**
-- Modify: `src/styles.css`
-- Modify: `src/App.tsx`
-- Modify: `index.html`
+- Modify: `src/app/globals.css`
+- Modify: `src/app/AppShell.tsx`
+- Modify: `src/app/layout.tsx`
 - Create: `README.md`
 
 **Interfaces:**
@@ -1523,7 +1589,7 @@ Private mobile-first PWA for two people to track daily habits and penalty paymen
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the Supabase SQL editor.
 3. Copy `.env.example` to `.env`.
-4. Fill `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+4. Fill `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 5. Run `npm install`.
 6. Run `npm run dev`.
 
@@ -1532,12 +1598,12 @@ Private mobile-first PWA for two people to track daily habits and penalty paymen
 - `npm run dev`
 - `npm run build`
 - `npm test`
-- `npm run preview`
+- `npm run start`
 ```
 
 - [ ] **Step 2: Polish responsive CSS**
 
-Modify `src/styles.css` so:
+Modify `src/app/globals.css` so:
 
 - Minimum supported width is 320px.
 - Mirrored panels remain side by side without text overflow.
@@ -1545,14 +1611,16 @@ Modify `src/styles.css` so:
 - Bottom nav does not cover screen content.
 - Header and progress card match the approved mockup direction.
 
-- [ ] **Step 3: Add app metadata**
+- [ ] **Step 3: Verify app metadata**
 
-Modify `index.html` to include:
+Verify `src/app/layout.tsx` includes the Apple PWA metadata through the exported `metadata.appleWebApp` object:
 
-```html
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-title" content="Couple Habit" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+```ts
+appleWebApp: {
+  capable: true,
+  title: "Couple Habit",
+  statusBarStyle: "black-translucent"
+}
 ```
 
 - [ ] **Step 4: Run full verification**
@@ -1574,7 +1642,7 @@ Run:
 npm run dev
 ```
 
-Expected: Vite prints a local URL such as `http://localhost:5173/`.
+Expected: Next.js prints a local URL such as `http://localhost:3000/`.
 
 - [ ] **Step 6: Manually verify mobile UX**
 
@@ -1591,7 +1659,7 @@ Open the local URL at mobile viewport widths `390x844` and `320x568`. Confirm:
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/styles.css src/App.tsx index.html README.md
+git add src/app/globals.css src/app/AppShell.tsx src/app/layout.tsx README.md
 git commit -m "chore: polish mobile PWA experience"
 ```
 
@@ -1600,5 +1668,5 @@ git commit -m "chore: polish mobile PWA experience"
 ## Self-Review Notes
 
 - Spec coverage: The plan covers no-login identity setup, mirrored Today UI, separate habit management, Supabase sync, 20,000 VND penalties, payments, 7-day history, Vietnamese UI labels, PWA setup, visual polish, and testing.
-- Red-flag scan: The plan intentionally leaves no unfinished markers or vague test steps. Implementation choices from the design spec are resolved here by selecting Vite, React, TypeScript, Supabase JS, Vitest, and vite-plugin-pwa.
+- Red-flag scan: The plan intentionally leaves no unfinished markers or vague test steps. Implementation choices from the design spec are resolved here by selecting Next.js App Router, React, TypeScript, Supabase JS, Vitest, and a manual web app manifest plus service worker.
 - Type consistency: Shared types are introduced in Task 2 and reused by service and UI tasks. Service methods are introduced before App integration. Penalty amount and timezone are consistent with the design spec.
