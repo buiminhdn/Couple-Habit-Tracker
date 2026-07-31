@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a private, mobile-first PWA for two people to track separate daily habit checklists, sync through Supabase, and calculate 20,000 VND penalties for missed days.
+**Goal:** Build a private, mobile-first PWA for two people to track separate daily habit checklists, sync through Google Sheets, and calculate 20,000 VND penalties for missed days.
 
-**Architecture:** Use a Next.js App Router TypeScript app with a client-side PWA shell for the private habit workflow, SEO-ready metadata, isolated domain logic, and a Supabase service layer. Store the local device identity in `localStorage`, keep Supabase database access out of UI components, and make penalty/checklist operations idempotent. The first implementation should run locally with seeded demo data and real Supabase wiring through environment variables.
+**Architecture:** Use a Next.js App Router TypeScript app with a client-side PWA shell for the private habit workflow, SEO-ready metadata, isolated domain logic, and server-side Google Sheets access through Next.js API route handlers. Store the local device identity in `localStorage`, keep Google service account credentials out of browser code, and make penalty/checklist operations idempotent. The first implementation should run locally with seeded demo data and real Google Sheets wiring through server-only environment variables.
 
-**Tech Stack:** Next.js App Router, React, TypeScript, Vitest, Testing Library, Supabase JS, manual web app manifest and service worker, global CSS, Google Sans Flex font family with system fallbacks.
+**Tech Stack:** Next.js App Router, React, TypeScript, Vitest, Testing Library, Google Sheets API through `googleapis`, manual web app manifest and service worker, global CSS, Google Sans Flex font family with system fallbacks.
 
 ## Global Constraints
 
@@ -19,7 +19,7 @@
 - History shows the last 7 days.
 - The `Today` screen uses mirrored panels: `Người ấy` on the left and `Tôi` on the right.
 - Each person can only tick and manage their own habits.
-- Data sync uses Supabase.
+- Data sync uses Google Sheets as the temporary MVP database.
 - Visual direction follows the approved mockup: dark calm header, light background, white progress card, lavender partner side, rose me side, large checkboxes, bottom nav.
 
 ---
@@ -40,8 +40,9 @@
 - `src/lib/date.ts`: timezone-safe date helpers.
 - `src/lib/identity.ts`: local identity persistence.
 - `src/lib/habitLogic.ts`: pure checklist, penalty, progress, and debt calculations.
-- `src/lib/supabaseClient.ts`: Supabase client creation.
-- `src/services/habitService.ts`: Supabase read/write service functions.
+- `src/lib/googleSheetsClient.ts`: server-only Google Sheets client creation.
+- `src/server/sheetsRepository.ts`: Google Sheets read/write repository.
+- `src/services/habitService.ts`: browser-safe API client that calls Next.js route handlers.
 - `src/components/IdentitySetup.tsx`: first-launch identity selection.
 - `src/components/BottomNav.tsx`: fixed bottom navigation.
 - `src/screens/TodayScreen.tsx`: mirrored daily checklist UI.
@@ -51,8 +52,9 @@
 - `src/test/setup.ts`: Testing Library matcher setup.
 - `src/test/testData.ts`: fixtures used by unit and UI tests.
 - `src/**/*.test.ts`, `src/**/*.test.tsx`: tests beside implementation files.
-- `supabase/schema.sql`: database schema, uniqueness constraints, and seed rows.
-- `.env.example`: required Supabase environment variables.
+- `docs/google-sheets-schema.md`: spreadsheet tabs, columns, and seed rows.
+- `src/app/api/habits/route.ts`: reads and mutates habit/checklist data through Google Sheets.
+- `.env.example`: required Google Sheets environment variables.
 
 ---
 
@@ -95,10 +97,11 @@ Create `package.json` with these scripts and dependencies:
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
+    "googleapis": "^173.0.0",
     "next": "^16.2.12",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.0",
@@ -399,8 +402,9 @@ import "@testing-library/jest-dom/vitest";
 Create `.env.example`:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+GOOGLE_SHEETS_SPREADSHEET_ID=your-spreadsheet-id
+GOOGLE_SERVICE_ACCOUNT_EMAIL=service-account@project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
 - [ ] **Step 7: Install dependencies**
@@ -668,16 +672,19 @@ git commit -m "feat: add habit domain logic"
 
 ---
 
-### Task 3: Add Supabase Schema and Client Boundary
+### Task 3: Add Google Sheets Schema and API Boundary
 
 **Files:**
-- Create: `supabase/schema.sql`
-- Create: `src/lib/supabaseClient.ts`
+- Create: `docs/google-sheets-schema.md`
+- Create: `src/lib/googleSheetsClient.ts`
+- Create: `src/server/sheetsRepository.ts`
 - Create: `src/services/habitService.ts`
 - Create: `src/services/habitService.test.ts`
+- Create: `src/app/api/habits/route.ts`
 
 **Interfaces:**
-- Produces: `createHabitService(client: SupabaseClient): HabitService`.
+- Produces: `createSheetsRepository(): SheetsRepository`.
+- Produces: `createHabitService(fetcher?: typeof fetch): HabitService`.
 - Produces: `HabitService` methods `listPeople`, `ensureTodayChecklist`, `toggleEntry`, `listSevenDayHistory`, `listMoneySummary`, `recordPayment`.
 
 - [ ] **Step 1: Write service shape test**
@@ -690,7 +697,7 @@ import { createHabitService } from "./habitService";
 
 describe("createHabitService", () => {
   it("returns the expected service functions", () => {
-    const service = createHabitService({} as never);
+    const service = createHabitService();
 
     expect(Object.keys(service).sort()).toEqual([
       "ensureTodayChecklist",
@@ -714,103 +721,161 @@ npm test -- src/services/habitService.test.ts
 
 Expected: FAIL because `habitService.ts` does not exist.
 
-- [ ] **Step 3: Create Supabase schema**
+- [ ] **Step 3: Document Google Sheets schema**
 
-Create `supabase/schema.sql`:
+Create `docs/google-sheets-schema.md`:
 
-```sql
-create table if not exists people (
-  id text primary key,
-  slug text not null unique check (slug in ('partner', 'me')),
-  display_name text not null,
-  side text not null check (side in ('left', 'right')),
-  theme_color text not null check (theme_color in ('lavender', 'rose')),
-  avatar_url text,
-  created_at timestamptz not null default now()
-);
+```md
+# Google Sheets Schema
 
-create table if not exists habits (
-  id uuid primary key default gen_random_uuid(),
-  person_id text not null references people(id) on delete cascade,
-  title text not null,
-  is_active boolean not null default true,
-  sort_order integer not null default 0,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+Create one private spreadsheet and share it with the service account email in `GOOGLE_SERVICE_ACCOUNT_EMAIL`.
 
-create table if not exists daily_entries (
-  id uuid primary key default gen_random_uuid(),
-  person_id text not null references people(id) on delete cascade,
-  habit_id uuid not null references habits(id) on delete cascade,
-  date date not null,
-  is_done boolean not null default false,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (person_id, habit_id, date)
-);
+## Tabs
 
-create table if not exists daily_closures (
-  id uuid primary key default gen_random_uuid(),
-  person_id text not null references people(id) on delete cascade,
-  date date not null,
-  is_complete boolean not null,
-  closed_at timestamptz not null default now(),
-  unique (person_id, date)
-);
+### people
 
-create table if not exists penalties (
-  id uuid primary key default gen_random_uuid(),
-  person_id text not null references people(id) on delete cascade,
-  date date not null,
-  amount integer not null default 20000,
-  reason text not null default 'missed_day',
-  created_at timestamptz not null default now(),
-  unique (person_id, date)
-);
+Header row:
 
-create table if not exists payments (
-  id uuid primary key default gen_random_uuid(),
-  person_id text not null references people(id) on delete cascade,
-  amount integer not null check (amount > 0),
-  note text not null default '',
-  paid_at timestamptz not null default now(),
-  created_at timestamptz not null default now()
-);
+`id,slug,display_name,side,theme_color,avatar_url,created_at`
 
-insert into people (id, slug, display_name, side, theme_color)
-values
-  ('partner', 'partner', 'Người ấy', 'left', 'lavender'),
-  ('me', 'me', 'Tôi', 'right', 'rose')
-on conflict (id) do update
-set display_name = excluded.display_name,
-    side = excluded.side,
-    theme_color = excluded.theme_color;
+Seed rows:
+
+`partner,partner,Người ấy,left,lavender,,2026-07-31T00:00:00.000Z`
+
+`me,me,Tôi,right,rose,,2026-07-31T00:00:00.000Z`
+
+### habits
+
+Header row:
+
+`id,person_id,title,is_active,sort_order,created_at,updated_at`
+
+### daily_entries
+
+Header row:
+
+`id,person_id,habit_id,date,is_done,created_at,updated_at`
+
+Logical unique key: `person_id + habit_id + date`.
+
+### daily_closures
+
+Header row:
+
+`id,person_id,date,is_complete,closed_at`
+
+Logical unique key: `person_id + date`.
+
+### penalties
+
+Header row:
+
+`id,person_id,date,amount,reason,created_at`
+
+Logical unique key: `person_id + date`.
+
+### payments
+
+Header row:
+
+`id,person_id,amount,note,paid_at,created_at`
 ```
 
-- [ ] **Step 4: Create Supabase client**
+- [ ] **Step 4: Create server-only Google Sheets client**
 
-Create `src/lib/supabaseClient.ts`:
+Create `src/lib/googleSheetsClient.ts`:
 
 ```ts
-import { createClient } from "@supabase/supabase-js";
+import "server-only";
+import { google } from "googleapis";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables.");
+if (!spreadsheetId || !clientEmail || !privateKey) {
+  throw new Error("Missing Google Sheets environment variables.");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const auth = new google.auth.JWT({
+  email: clientEmail,
+  key: privateKey,
+  scopes: ["https://www.googleapis.com/auth/spreadsheets"]
+});
+
+export const sheets = google.sheets({ version: "v4", auth });
+export { spreadsheetId };
 ```
 
-- [ ] **Step 5: Create service interface with implemented method shells**
+- [ ] **Step 5: Create repository and browser-safe service shells**
+
+Create `src/server/sheetsRepository.ts`:
+
+```ts
+import "server-only";
+import { randomUUID } from "crypto";
+import { sheets, spreadsheetId } from "../lib/googleSheetsClient";
+import type { DailyEntry, DailySummary, Payment, Penalty, Person, PersonSlug } from "../types/domain";
+
+export type MoneySummary = {
+  personId: PersonSlug;
+  debt: number;
+  penalties: Penalty[];
+  payments: Payment[];
+};
+
+export type SheetsRepository = {
+  listPeople(): Promise<Person[]>;
+  ensureTodayChecklist(date: string): Promise<DailyEntry[]>;
+  toggleEntry(entryId: string, isDone: boolean): Promise<void>;
+  listSevenDayHistory(today: string): Promise<DailySummary[]>;
+  listMoneySummary(): Promise<MoneySummary[]>;
+  recordPayment(personId: PersonSlug, amount: number, note: string): Promise<void>;
+};
+
+export function createSheetsRepository(): SheetsRepository {
+  return {
+    async listPeople() {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: "people!A2:G"
+      });
+      return (response.data.values ?? []).map((row) => ({
+        id: row[0],
+        slug: row[1],
+        displayName: row[2],
+        side: row[3],
+        themeColor: row[4],
+        avatarUrl: row[5] || undefined
+      }));
+    },
+    async ensureTodayChecklist() {
+      return [];
+    },
+    async toggleEntry() {},
+    async listSevenDayHistory() {
+      return [];
+    },
+    async listMoneySummary() {
+      return [];
+    },
+    async recordPayment(personId, amount, note) {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: "payments!A:G",
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [[randomUUID(), personId, amount, note, new Date().toISOString(), new Date().toISOString()]]
+        }
+      });
+    }
+  };
+}
+```
 
 Create `src/services/habitService.ts`:
 
 ```ts
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DailyEntry, DailySummary, Payment, Penalty, Person, PersonSlug } from "../types/domain";
 
 export type MoneySummary = {
@@ -829,46 +894,87 @@ export type HabitService = {
   recordPayment(personId: PersonSlug, amount: number, note: string): Promise<void>;
 };
 
-export function createHabitService(client: SupabaseClient): HabitService {
+async function requestJson<T>(fetcher: typeof fetch, payload: Record<string, unknown>): Promise<T> {
+  const response = await fetcher("/api/habits", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error("Google Sheets sync failed.");
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export function createHabitService(fetcher: typeof fetch = fetch): HabitService {
   return {
     async listPeople() {
-      const { data, error } = await client.from("people").select("*").order("side");
-      if (error) throw error;
-      return (data ?? []).map((row) => ({
-        id: row.id,
-        slug: row.slug,
-        displayName: row.display_name,
-        side: row.side,
-        themeColor: row.theme_color,
-        avatarUrl: row.avatar_url ?? undefined
-      }));
+      return requestJson<Person[]>(fetcher, { action: "listPeople" });
     },
-    async ensureTodayChecklist() {
-      return [];
+    async ensureTodayChecklist(date) {
+      return requestJson<DailyEntry[]>(fetcher, { action: "ensureTodayChecklist", date });
     },
     async toggleEntry(entryId, isDone) {
-      const { error } = await client.from("daily_entries").update({ is_done: isDone }).eq("id", entryId);
-      if (error) throw error;
+      await requestJson<void>(fetcher, { action: "toggleEntry", entryId, isDone });
     },
-    async listSevenDayHistory() {
-      return [];
+    async listSevenDayHistory(today) {
+      return requestJson<DailySummary[]>(fetcher, { action: "listSevenDayHistory", today });
     },
     async listMoneySummary() {
-      return [];
+      return requestJson<MoneySummary[]>(fetcher, { action: "listMoneySummary" });
     },
     async recordPayment(personId, amount, note) {
-      const { error } = await client.from("payments").insert({
-        person_id: personId,
-        amount,
-        note
-      });
-      if (error) throw error;
+      await requestJson<void>(fetcher, { action: "recordPayment", personId, amount, note });
     }
   };
 }
 ```
 
-- [ ] **Step 6: Run test to verify pass**
+- [ ] **Step 6: Create API route handler shell**
+
+Create `src/app/api/habits/route.ts`:
+
+```ts
+import { NextResponse } from "next/server";
+import { createSheetsRepository } from "../../../server/sheetsRepository";
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  const repository = createSheetsRepository();
+
+  if (body.action === "listPeople") {
+    return NextResponse.json(await repository.listPeople());
+  }
+
+  if (body.action === "ensureTodayChecklist") {
+    return NextResponse.json(await repository.ensureTodayChecklist(body.date));
+  }
+
+  if (body.action === "toggleEntry") {
+    await repository.toggleEntry(body.entryId, body.isDone);
+    return NextResponse.json(null);
+  }
+
+  if (body.action === "listSevenDayHistory") {
+    return NextResponse.json(await repository.listSevenDayHistory(body.today));
+  }
+
+  if (body.action === "listMoneySummary") {
+    return NextResponse.json(await repository.listMoneySummary());
+  }
+
+  if (body.action === "recordPayment") {
+    await repository.recordPayment(body.personId, body.amount, body.note);
+    return NextResponse.json(null);
+  }
+
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+}
+```
+
+- [ ] **Step 7: Run test to verify pass**
 
 Run:
 
@@ -878,11 +984,11 @@ npm test -- src/services/habitService.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add supabase/schema.sql src/lib/supabaseClient.ts src/services/habitService.ts src/services/habitService.test.ts
-git commit -m "feat: add Supabase service boundary"
+git add docs/google-sheets-schema.md src/lib/googleSheetsClient.ts src/server/sheetsRepository.ts src/services/habitService.ts src/services/habitService.test.ts src/app/api/habits/route.ts
+git commit -m "feat: add Google Sheets data boundary"
 ```
 
 ---
@@ -1168,7 +1274,7 @@ Create `src/screens/TodayScreen.tsx` using `calculateCompletion`. The component 
 
 - [ ] **Step 5: Wire TodayScreen into App**
 
-Modify `src/app/AppShell.tsx` so the `today` tab renders `TodayScreen` with temporary fixture entries until Task 7 connects Supabase data.
+Modify `src/app/AppShell.tsx` so the `today` tab renders `TodayScreen` with temporary fixture entries until Task 7 connects Google Sheets data through the API client.
 
 - [ ] **Step 6: Add visual CSS**
 
@@ -1265,7 +1371,7 @@ deactivateHabit(habitId: string): Promise<void>;
 moveHabit(habitId: string, sortOrder: number): Promise<void>;
 ```
 
-Each method should use the `habits` table and throw Supabase errors.
+Each method should call the browser-safe API client. The server repository will write to the `habits` sheet tab in Task 7.
 
 - [ ] **Step 5: Wire HabitsScreen into App with temporary local state**
 
@@ -1291,7 +1397,7 @@ git commit -m "feat: add habit management screen"
 
 ---
 
-### Task 7: Implement Supabase Data Loading and Mutations
+### Task 7: Implement Google Sheets Data Loading and Mutations
 
 **Files:**
 - Modify: `src/services/habitService.ts`
@@ -1302,22 +1408,26 @@ git commit -m "feat: add habit management screen"
 **Interfaces:**
 - Consumes: service methods from Task 3 and Task 6.
 - Produces: App-level loading, sync, and error states.
-- Produces: real Supabase-backed `Today`, `Habits`, and payment data.
+- Produces: real Google Sheets-backed `Today`, `Habits`, and payment data.
 
-- [ ] **Step 1: Expand service tests with mocked Supabase client**
+- [ ] **Step 1: Expand service tests with mocked fetch client**
 
 Modify `src/services/habitService.test.ts` to test:
 
 ```ts
-it("toggleEntry updates the matching daily entry", async () => {
-  const update = vi.fn(() => ({ eq: vi.fn(() => Promise.resolve({ error: null })) }));
-  const from = vi.fn(() => ({ update }));
-  const service = createHabitService({ from } as never);
+it("toggleEntry posts the matching daily entry update", async () => {
+  const fetcher = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(null) } as Response));
+  const service = createHabitService(fetcher as never);
 
   await service.toggleEntry("entry-1", true);
 
-  expect(from).toHaveBeenCalledWith("daily_entries");
-  expect(update).toHaveBeenCalledWith({ is_done: true });
+  expect(fetcher).toHaveBeenCalledWith(
+    "/api/habits",
+    expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ action: "toggleEntry", entryId: "entry-1", isDone: true })
+    })
+  );
 });
 ```
 
@@ -1337,17 +1447,17 @@ Expected: FAIL until all service methods are implemented.
 
 Modify `src/services/habitService.ts` so:
 
-- `ensureTodayChecklist(date)` loads active habits, inserts missing `daily_entries` with upsert/ignore semantics, and returns entries joined with habit titles.
+- `ensureTodayChecklist(date)` loads active habits, appends missing `daily_entries` rows after checking logical uniqueness, and returns entries joined with habit titles.
 - `listSevenDayHistory(today)` loads the last seven dates of entries and penalties, then returns `DailySummary[]`.
 - `listMoneySummary()` loads penalties and payments and returns debt per person.
-- Habit methods read/write `habits`.
-- Payment method inserts a row into `payments`.
+- Habit methods read/write the `habits` sheet tab.
+- Payment method appends a row into the `payments` sheet tab.
 
 - [ ] **Step 4: Wire App to service**
 
 Modify `src/app/AppShell.tsx` to:
 
-- Create the service from `supabase`.
+- Create the browser-safe service with `createHabitService()`.
 - Load people, today's entries, habits, and money summaries after identity selection.
 - Show `Đang đồng bộ...` while loading.
 - Show `Chưa đồng bộ` when a service call fails.
@@ -1369,7 +1479,7 @@ Expected: PASS and build succeeds.
 
 ```bash
 git add src/services/habitService.ts src/services/habitService.test.ts src/app/AppShell.tsx src/types/domain.ts
-git commit -m "feat: connect app to Supabase data"
+git commit -m "feat: connect app to Google Sheets data"
 ```
 
 ---
@@ -1510,9 +1620,9 @@ Modify `src/services/habitService.test.ts` to verify:
 
 - The service inserts one `daily_closures` row per person/date.
 - The service inserts a 20,000 VND penalty when entries are incomplete.
-- The service does not throw on duplicate rows when uniqueness constraints reject duplicates.
+- The service does not append duplicate logical rows when the same person/date group is closed more than once.
 
-Use a mocked Supabase client that records calls to `from("daily_closures").upsert(...)` and `from("penalties").upsert(...)`.
+Use a mocked Sheets repository helper that records writes to `daily_closures` and `penalties`.
 
 - [ ] **Step 2: Run tests to verify failure**
 
@@ -1586,12 +1696,13 @@ Private mobile-first PWA for two people to track daily habits and penalty paymen
 
 ## Setup
 
-1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL editor.
+1. Create a private Google Sheet.
+2. Create the tabs and headers from `docs/google-sheets-schema.md`.
 3. Copy `.env.example` to `.env`.
-4. Fill `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-5. Run `npm install`.
-6. Run `npm run dev`.
+4. Fill `GOOGLE_SHEETS_SPREADSHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, and `GOOGLE_PRIVATE_KEY`.
+5. Share the spreadsheet with the service account email.
+6. Run `npm install`.
+7. Run `npm run dev`.
 
 ## Scripts
 
@@ -1667,6 +1778,6 @@ git commit -m "chore: polish mobile PWA experience"
 
 ## Self-Review Notes
 
-- Spec coverage: The plan covers no-login identity setup, mirrored Today UI, separate habit management, Supabase sync, 20,000 VND penalties, payments, 7-day history, Vietnamese UI labels, PWA setup, visual polish, and testing.
-- Red-flag scan: The plan intentionally leaves no unfinished markers or vague test steps. Implementation choices from the design spec are resolved here by selecting Next.js App Router, React, TypeScript, Supabase JS, Vitest, and a manual web app manifest plus service worker.
+- Spec coverage: The plan covers no-login identity setup, mirrored Today UI, separate habit management, Google Sheets sync, 20,000 VND penalties, payments, 7-day history, Vietnamese UI labels, PWA setup, visual polish, and testing.
+- Red-flag scan: The plan intentionally leaves no unfinished markers or vague test steps. Implementation choices from the design spec are resolved here by selecting Next.js App Router, React, TypeScript, Google Sheets API through `googleapis`, Vitest, and a manual web app manifest plus service worker.
 - Type consistency: Shared types are introduced in Task 2 and reused by service and UI tasks. Service methods are introduced before App integration. Penalty amount and timezone are consistent with the design spec.

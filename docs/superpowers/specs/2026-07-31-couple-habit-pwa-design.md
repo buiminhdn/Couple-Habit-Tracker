@@ -12,7 +12,7 @@ The core experience is a `Today` screen with a mirrored layout: partner on the l
 - Let both people see each other's daily progress in one glance.
 - Let each person tick only their own daily checklist.
 - Let each person manage their own habit checklist.
-- Sync data between two phones through Supabase.
+- Sync data between two phones through Google Sheets.
 - Automatically calculate penalties and outstanding debt.
 - Keep the MVP focused and avoid account systems, group support, social features, or complex statistics.
 
@@ -27,7 +27,7 @@ The core experience is a `Today` screen with a mirrored layout: partner on the l
 
 ## Product Decisions
 
-- Data sync uses Supabase.
+- Data sync uses Google Sheets as the temporary MVP database.
 - The app is designed for exactly two people.
 - Each person has a separate habit checklist.
 - The first app launch asks the user to choose identity: `Tôi` or `Người ấy`. This is stored locally on that device.
@@ -158,23 +158,24 @@ The frontend is a mobile-first PWA with these major UI areas:
 - `Habits`
 - `Money`
 
-Data access should be isolated behind a Supabase service layer so UI components do not contain raw database queries throughout the app.
+Data access should be isolated behind a Next.js API/service layer so UI components do not read or write Google Sheets directly. Google credentials must stay server-side.
 
 Recommended frontend boundaries:
 
 - UI components for screens and reusable controls.
 - Domain logic for completion, penalties, and debt calculations.
-- Supabase service functions for reads and writes.
+- Google Sheets repository functions for reads and writes.
+- Next.js API route handlers that expose app-specific operations to the PWA.
 - Local storage helper for selected identity.
 - PWA configuration for manifest and installability.
 
-### Supabase Data Model
+### Google Sheets Data Model
+
+Use one private spreadsheet with separate tabs. The app treats rows as records and uses stable IDs so rows can be updated safely. The spreadsheet is shared with the Google service account email used by the deployed app.
 
 #### `people`
 
-Stores the two fixed people.
-
-Fields:
+Columns:
 
 - `id`
 - `slug`
@@ -193,7 +194,7 @@ Expected rows:
 
 Stores each person's habit definitions.
 
-Fields:
+Columns:
 
 - `id`
 - `person_id`
@@ -207,7 +208,7 @@ Fields:
 
 Stores daily habit completion states.
 
-Fields:
+Columns:
 
 - `id`
 - `person_id`
@@ -217,7 +218,7 @@ Fields:
 - `created_at`
 - `updated_at`
 
-Uniqueness:
+Logical uniqueness:
 
 - One entry per `person_id`, `habit_id`, and `date`.
 
@@ -225,7 +226,7 @@ Uniqueness:
 
 Stores whether a person's day has already been closed. This prevents duplicate penalty creation.
 
-Fields:
+Columns:
 
 - `id`
 - `person_id`
@@ -233,7 +234,7 @@ Fields:
 - `is_complete`
 - `closed_at`
 
-Uniqueness:
+Logical uniqueness:
 
 - One closure per `person_id` and `date`.
 
@@ -241,7 +242,7 @@ Uniqueness:
 
 Stores missed-day penalties.
 
-Fields:
+Columns:
 
 - `id`
 - `person_id`
@@ -250,7 +251,7 @@ Fields:
 - `reason`
 - `created_at`
 
-Uniqueness:
+Logical uniqueness:
 
 - One penalty per `person_id` and `date`.
 
@@ -258,7 +259,7 @@ Uniqueness:
 
 Stores payment records.
 
-Fields:
+Columns:
 
 - `id`
 - `person_id`
@@ -296,7 +297,7 @@ When the app opens or resumes:
 
 1. Find unclosed dates before today for each person.
 2. For each person and date, check whether all daily entries created for that date were completed.
-3. Create a `daily_closures` row.
+3. Append or update a `daily_closures` row.
 4. If the day is incomplete, create one 20,000 VND penalty.
 5. Do not create duplicate closures or duplicate penalties.
 
@@ -314,11 +315,11 @@ Debt should not display below zero. If payments exceed penalties, show zero outs
 
 - If no identity is selected, the app must show identity setup before all other screens.
 - If a person has no active habits, show an empty state on their panel and do not create a penalty for that person for that day.
-- If Supabase is temporarily unreachable, show the most recently loaded data where possible and display a clear unsynced state.
+- If Google Sheets is temporarily unreachable or quota-limited, show the most recently loaded data where possible and display a clear unsynced state.
 - If a habit is added today, create today's daily entry for it.
 - If a habit is deactivated today, it should stop appearing in new checklists. Existing entries should remain in history.
 - If the app is not opened for several days, it should close all missed past days the next time it opens.
-- If two devices open at the same time, uniqueness constraints must prevent duplicate entries, closures, and penalties.
+- If two devices open at the same time, app-level idempotency must prevent duplicate entries, closures, and penalties as much as possible. Google Sheets is not a transactional database, so this is acceptable for the private two-person MVP but should be revisited if the app scales.
 
 ## Testing Strategy
 
@@ -334,7 +335,7 @@ Cover domain logic:
 
 ### Data Tests
 
-Cover Supabase service behavior:
+Cover Google Sheets repository and API behavior:
 
 - Ensuring today's checklist is idempotent.
 - Creating missing daily entries.
@@ -367,8 +368,8 @@ Verify mobile layouts at narrow and common phone widths:
 
 These are intentionally left for implementation planning:
 
-- Exact frontend framework.
-- Exact Supabase client setup and environment variable names.
-- Whether past-day closure runs only client-side or also through a Supabase RPC/Edge Function.
+- Exact Google service account setup and environment variable names.
+- Exact Next.js API route shape for Google Sheets operations.
+- Whether past-day closure runs in a Next.js API route only or later moves to a scheduled job.
 - Exact avatar assets for each person.
 - Exact Vietnamese microcopy for all status badges and empty states.
