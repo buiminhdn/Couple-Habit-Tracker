@@ -56,3 +56,10 @@ export type DailySummary = {
   completion: CompletionSummary;
   hasPenalty: boolean;
 };
+
+export type MoneySummary = {
+  personId: PersonSlug;
+  debt: number;
+  penalties: Penalty[];
+  payments: Payment[];
+};
