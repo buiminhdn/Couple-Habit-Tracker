@@ -1,4 +1,5 @@
 import { calculateCompletion } from "../lib/habitLogic";
+import { personInitials, personNames } from "../lib/people";
 import type { DailyEntry, MoneySummary, PersonSlug } from "../types/domain";
 
 type EntriesByPerson = Record<PersonSlug, DailyEntry[]>;
@@ -11,15 +12,9 @@ type Props = {
   onToggleEntry(entryId: string, nextDone: boolean): void;
 };
 
-const personLabels: Record<PersonSlug, string> = {
-  partner: "Người ấy",
-  me: "Tôi"
-};
+const personLabels = personNames;
 
-const avatars: Record<PersonSlug, string> = {
-  partner: "N",
-  me: "T"
-};
+const avatars = personInitials;
 
 const syncLabels = {
   loading: "Đang đồng bộ",

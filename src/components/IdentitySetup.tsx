@@ -1,3 +1,4 @@
+import { personNames } from "../lib/people";
 import type { PersonSlug } from "../types/domain";
 
 type Props = {
@@ -9,13 +10,13 @@ export default function IdentitySetup({ onSelect }: Props) {
     <main className="identity-screen">
       <section className="identity-card">
         <p className="eyebrow">Couple Habit</p>
-        <h1>Máy này là của ai?</h1>
+        <h1>Ai đang dùng máy này?</h1>
         <div className="identity-actions">
           <button type="button" onClick={() => onSelect("partner")}>
-            Người ấy
+            {personNames.partner}
           </button>
           <button type="button" onClick={() => onSelect("me")}>
-            Tôi
+            {personNames.me}
           </button>
         </div>
       </section>

@@ -16,7 +16,7 @@ describe("MoneyScreen", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Tôi đã đóng phạt" }));
+    await userEvent.click(screen.getByRole("button", { name: "Minh đã đóng phạt" }));
 
     expect(onRecordPayment).toHaveBeenCalledWith("me", 40000, "");
   });

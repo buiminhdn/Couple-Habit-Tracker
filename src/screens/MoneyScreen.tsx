@@ -1,6 +1,5 @@
+import { personNames as labels } from "../lib/people";
 import type { MoneySummary, PersonSlug } from "../types/domain";
-
-const labels: Record<PersonSlug, string> = { partner: "Người ấy", me: "Tôi" };
 
 function formatMoney(amount: number) {
   return new Intl.NumberFormat("vi-VN").format(amount) + "đ";

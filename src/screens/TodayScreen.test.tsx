@@ -34,8 +34,8 @@ describe("TodayScreen", () => {
       />
     );
 
-    expect(screen.getByText("Người ấy")).toBeInTheDocument();
-    expect(screen.getByText("Tôi")).toBeInTheDocument();
+    expect(screen.getByText("Ly")).toBeInTheDocument();
+    expect(screen.getByText("Minh")).toBeInTheDocument();
     expect(screen.getByText("Chưa hoàn thành checklist = phạt 20.000đ")).toBeInTheDocument();
   });
 

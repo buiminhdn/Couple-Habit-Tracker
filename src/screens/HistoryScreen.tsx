@@ -1,6 +1,5 @@
+import { personNames as labels } from "../lib/people";
 import type { DailySummary } from "../types/domain";
-
-const labels = { partner: "Người ấy", me: "Tôi" };
 
 export default function HistoryScreen({ summaries }: { summaries: DailySummary[] }) {
   return (

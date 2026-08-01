@@ -8,7 +8,7 @@ describe("IdentitySetup", () => {
     const onSelect = vi.fn();
     render(<IdentitySetup onSelect={onSelect} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Tôi" }));
+    await userEvent.click(screen.getByRole("button", { name: "Minh" }));
 
     expect(onSelect).toHaveBeenCalledWith("me");
   });
