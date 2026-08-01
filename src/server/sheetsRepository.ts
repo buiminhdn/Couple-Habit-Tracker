@@ -178,11 +178,13 @@ export function createSheetsRepository(): SheetsRepository {
 
       const refreshedRows = await getRows("daily_entries");
       const habitMap = new Map(habits.map((habit) => [habit.id, habit]));
+      // Chỉ trả về entry của habit còn active — bỏ qua entry "mồ côi" (habit đã tắt/xoá)
+      // để không hiện ra dòng "Thói quen" và không tính sai tiến độ.
       return refreshedRows
-        .filter((row) => row[3] === date)
+        .filter((row) => row[3] === date && habitMap.has(row[2]))
         .map((row) => {
-          const habit = habitMap.get(row[2]);
-          return { ...mapEntry(row, habit?.title ?? "Thói quen"), sortOrder: habit?.sortOrder ?? 0 };
+          const habit = habitMap.get(row[2])!;
+          return { ...mapEntry(row, habit.title), sortOrder: habit.sortOrder };
         })
         .sort((a, b) => a.sortOrder - b.sortOrder);
     },
@@ -200,6 +202,8 @@ export function createSheetsRepository(): SheetsRepository {
       const rows = await getRows("daily_entries");
       const closures = await getRows("daily_closures");
       const penalties = await getRows("penalties");
+      const habitRows = await getRows("habits");
+      const activeHabitIds = new Set(habitRows.map(mapHabit).filter((habit) => habit.isActive).map((habit) => habit.id));
       const closedKeys = new Set(closures.map((row) => `${row[1]}:${row[2]}`));
       const penaltyKeys = new Set(penalties.map((row) => `${row[1]}:${row[2]}`));
       const groups = new Map<string, DailyEntry[]>();
@@ -207,6 +211,8 @@ export function createSheetsRepository(): SheetsRepository {
       for (const row of rows) {
         const entry = mapEntry(row);
         if (entry.date >= today) continue;
+        // Bỏ qua entry mồ côi (habit đã tắt) để không tính/phạt sai.
+        if (!activeHabitIds.has(entry.habitId)) continue;
         const key = `${entry.personId}:${entry.date}`;
         groups.set(key, [...(groups.get(key) ?? []), entry]);
       }
