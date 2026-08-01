@@ -1,3 +1,4 @@
+import { shiftDate } from "./date";
 import type { DailyEntry, DailySummary, Habit, MoneySummary, PersonSlug } from "../types/domain";
 
 export const demoHabits: Habit[] = [
@@ -48,7 +49,7 @@ export const demoMoney: MoneySummary[] = [
 export function makeDemoHistory(date: string): DailySummary[] {
   return ["partner", "me"].flatMap((personId) =>
     Array.from({ length: 7 }, (_, index) => ({
-      date,
+      date: shiftDate(date, -index),
       personId: personId as PersonSlug,
       completion: {
         total: 5,

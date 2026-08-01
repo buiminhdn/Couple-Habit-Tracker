@@ -46,7 +46,7 @@ function PersonPanel({
 }) {
   const completion = calculateCompletion(entries);
   const isEditable = personId === currentIdentity;
-  const status = completion.isComplete ? "Xong rồi" : "Còn thiếu";
+  const status = completion.isComplete ? "Xong rồi 🎉" : "Còn thiếu";
 
   return (
     <section className={`person-panel ${personId}`} aria-label={personLabels[personId]}>
@@ -55,7 +55,7 @@ function PersonPanel({
         {avatars[personId]}
       </div>
       <strong className="person-percent">{completion.percent}%</strong>
-      <span className="status-badge">{status}</span>
+      <span className={`status-badge${completion.isComplete ? " done" : ""}`}>{status}</span>
       <div className="habit-list">
         {entries.length === 0 ? (
           <p className="empty-state">Chưa có thói quen</p>
@@ -82,19 +82,22 @@ function PersonPanel({
 export default function TodayScreen({ currentIdentity, entriesByPerson, moneySummaries, syncStatus, onToggleEntry }: Props) {
   const allEntries = [...entriesByPerson.partner, ...entriesByPerson.me];
   const coupleCompletion = calculateCompletion(allEntries);
+  const now = new Date();
   const today = new Intl.DateTimeFormat("vi-VN", {
     weekday: "long",
     day: "2-digit",
     month: "2-digit",
     year: "numeric"
-  }).format(new Date());
+  }).format(now);
+  const hour = now.getHours();
+  const greeting = hour < 11 ? "Chào buổi sáng" : hour < 18 ? "Chào buổi chiều" : "Chào buổi tối";
 
   return (
     <section className="today-screen">
       <header className="hero-header">
         <div>
           <p>Hôm nay</p>
-          <h1>Today</h1>
+          <h1>{greeting} 💜</h1>
           <span>{today}</span>
         </div>
         <div className={`sync-pill ${syncStatus}`}>
